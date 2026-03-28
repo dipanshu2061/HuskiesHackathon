@@ -1,2 +1,2 @@
-#HuskiesHackathon
--easy way of categorising your spending
+# HuskiesHackathon
+easy way of categorising your spending
