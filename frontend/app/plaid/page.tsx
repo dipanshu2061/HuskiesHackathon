@@ -42,6 +42,8 @@ export default function Home() {
     });
     const data = await res.json();
     setStatus(`✅ Bank linked! Item ID: ${data.item_id}`);
+    //redirect
+      window.location.href = "/dashboard";
   }, []);
 
   // Step 2: Open Plaid Link UI
