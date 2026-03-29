@@ -16,7 +16,7 @@ export default function LoginPage() {
   useEffect(() => {
   const token = localStorage.getItem("token");
   if (token) {
-      window.location.href = "/dashboard";
+      window.location.href = "/";
     }
   }, []);
 
@@ -59,7 +59,7 @@ export default function LoginPage() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("userId", data.userId);
 
-      window.location.href = "/dashboard";
+      window.location.href = "/";
     } catch (err) {
       setError("Network error — please check your connection.");
     } finally {

@@ -9,7 +9,7 @@ import User from "../models/User.js";
 const router = express.Router()
 
 
-// ── 1. Create a Link token ────────────────────────────────────────────────────
+// ── 1. Create a Link token ────────────────────────────────────────────────────ai
 // Frontend calls this to initialise Plaid Link
 router.post("/link/token/create", requireAuth,async (req, res) => {
 
@@ -81,7 +81,7 @@ router.post("/item/public_token/exchange", requireAuth,async (req, res) => {
       itemId: item_id,
       accessToken: access_token,
       accounts: accounts,
-      institutionName
+      institutionName,
     })
     // ⚠️  Store access_token + item_id in your DB — never expose access_token to the client
     res.json({ item_id, institution: institutionName, message: "Access token stored securely (check server logs for demo)" });
@@ -105,19 +105,89 @@ router.post("/accounts/balance/get", async (req, res) => {
   }
 });
 // ── 4. Get transactions ───────────────────────────────────────────────────────
-router.post("/transactions/get", async (req, res) => {
-  const { access_token, start_date, end_date } = req.body;
-  if (!access_token) return res.status(400).json({ error: "access_token required" });
+// ── 4. Get transactions ───────────────────────────────────────────────────────
+router.get("/transactions/get", requireAuth, async (req, res) => {
+  const { start_date, end_date, item_id } = req.query;
 
   try {
-    const response = await plaidClient.transactionsGet({
-      access_token,
-      start_date: start_date || "2024-01-01",
-      end_date: end_date || new Date().toISOString().split("T")[0],
-      options: { count: 100, offset: 0 },
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    if (!user.plaidItems || user.plaidItems.length === 0)
+      return res.status(404).json({ error: "No linked bank accounts found" });
+
+    // If item_id is provided, only fetch for that item — otherwise fetch all
+    const itemsToFetch = item_id
+      ? user.plaidItems.filter((item) => item.itemId === item_id)
+      : user.plaidItems.filter((item) => item.status === "active");
+
+    if (itemsToFetch.length === 0)
+      return res.status(404).json({ error: "No matching active items found" });
+
+    const startDate = start_date || "2024-01-01";
+    const endDate = end_date || new Date().toISOString().split("T")[0];
+
+    // Fetch transactions for all items in parallel
+    const results = await Promise.allSettled(
+      itemsToFetch.map(async (plaidItem) => {
+        let allTransactions = [];
+        let totalTransactions = null;
+        let offset = 0;
+        const count = 100;
+
+        // Paginate through all transactions
+        do {
+          const response = await plaidClient.transactionsGet({
+            access_token: plaidItem.accessToken,
+            start_date: startDate,
+            end_date: endDate,
+            options: { count, offset },
+          });
+
+          const { transactions, total_transactions } = response.data;
+          totalTransactions = total_transactions;
+          allTransactions = allTransactions.concat(transactions);
+          offset += transactions.length;
+        } while (allTransactions.length < totalTransactions);
+
+        return {
+          itemId: plaidItem.itemId,
+          institutionName: plaidItem.institutionName,
+          accounts: plaidItem.accounts,
+          transactions: allTransactions,
+          total_transactions: totalTransactions,
+        };
+      })
+    );
+
+    // Separate successes from failures
+    const succeeded = [];
+    const failed = [];
+
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        succeeded.push(result.value);
+      } else {
+        console.error(`Failed to fetch transactions for item ${itemsToFetch[i].itemId}:`, result.reason);
+        failed.push({
+          itemId: itemsToFetch[i].itemId,
+          institutionName: itemsToFetch[i].institutionName,
+          error: result.reason?.response?.data?.error_message || result.reason?.message || "Unknown error",
+        });
+
+        // Mark errored items in DB
+        user.updatePlaidItemStatus(itemsToFetch[i].itemId, "error").catch(console.error);
+      }
     });
-    res.json(response.data);
+
+    res.json({
+      start_date: startDate,
+      end_date: endDate,
+      results: succeeded,
+      ...(failed.length > 0 && { errors: failed }),
+    });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.response?.data || err.message });
   }
 });

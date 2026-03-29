@@ -7,7 +7,7 @@ import {PlaidEnvironments, PlaidApi, Configuration} from "plaid"
 
 import plaidRoutes from "./src/routes/plaid.js"
 import authRoutes from "./src/routes/auth.js"
-
+import aiRouter from "./src/routes/ai.js";
 
 import middlewares from './src/routes/middleware.js';
 
@@ -31,13 +31,14 @@ export const plaidClient = new PlaidApi(
 
 
     const app = express()
+    app.use(cors("*"));
     app.use(express.json())
-    app.use(cors());
     app.use(morgan('tiny'));
 
 
     app.use("/api/plaid", plaidRoutes)
     app.use("/api/auth", authRoutes)
+    app.use("/api/ai", aiRouter);
 
     app.use(middlewares.notFound);
     app.use(middlewares.errorHandler);

@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -86,88 +85,102 @@ function Skeleton({ w = "100%", h = "14px", radius = "4px" }: { w?: string; h?: 
   );
 }
 
-
-/*
-export default function Report() {
-  const income = 1222
-  const spent = 1233
-  const net = 120000
-  const transactions = [{
-  "transaction_id": "wallet-transaction-id-sandbox-feca8a7a-5591-4aef-9297-f3062bb735d3",
-  "wallet_id": "wallet-id-production-53e58b32-fc1c-46fe-bbd6-e584b27a88",
-  "type": "PAYOUT",
-  "reference": "Payout 99744",
-  "amount": {
-    "iso_currency_code": "GBP",
-    "value": 123.12
-  },
-  "status": "EXECUTED",
-  "created_at": "2020-12-02T21:14:54Z",
-  "last_status_update": "2020-12-02T21:15:01Z",
-  "counterparty": {
-    "numbers": {
-      "bacs": {
-        "account": "31926819",
-        "sort_code": "601613"
-      }
-    },
-    "name": "John Smith"
-  },
-  "request_id": "4zlKapIkTm8p5KM",
-  "related_transactions": [
-    {
-      "id": "wallet-transaction-id-sandbox-2ba30780-d549-4335-b1fe-c2a938aa39d2",
-      "type": "RETURN"
-    }
-  ]
-}]
-
-useEffect(() => {
-    const fet = async () => {
-      try {
-        const res = await fetch("http://localhost:5000/api/ai/analyze", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({ transactions, income, spent, net })
-        })
-
-        if (!res.ok) {
-          const errorBody = await res.text()
-          console.log("Error:", res.status, errorBody)
-          return
-        }
-
-        const data = await res.json()
-        console.log("Success:", data)
-      } catch (error) {
-        console.log(error)
-      }
-    }
-    fet() // ← was missing
-  }, [])
-
-  return (
-    <main>
-      <h1>Hello, World!</h1>
-    </main>
-  )
-}
-
-*/
-
-
 // ─── AI Insight Panel ──────────────────────────────────────────────────────────
-// ─── AI Insight Panel (hardcoded) ─────────────────────────────────────────────
-const HARDCODED_INSIGHT = [
-  "Your finances are in a strong position this month, with a net surplus of $9,180.60 against $2,819.40 in total spending. This indicates solid cash flow management, and your income comfortably covers all expenses with room to spare.",
-  "Shopping and Food & Dining dominate your discretionary spend, with Whole Foods appearing as your largest single merchant at $312.40. Your spending is most concentrated mid-week, suggesting routine-driven purchasing rather than weekend splurges.",
-  "Consider setting a monthly grocery budget of $250 and using a single weekly shop to reduce the Whole Foods total. Auditing any recurring Shopping charges could recover an additional $50–100 per month, which compounded over a year adds meaningful savings.",
-];
+function AIInsightPanel({ transactions, income, spent, net }: {
+  transactions: NormalizedTx[];
+  income: number;
+  spent: number;
+  net: number;
+}) {
+  const [insight, setInsight] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasRun = useRef(false);
 
-function AIInsightPanel() {
+  const run = async () => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+    setLoading(true);
+    setInsight("");
+    setError(null);
+    setDone(false);
+
+    try {
+      const auth = `Bearer ${localStorage.getItem("token")}`
+      const url = "http://localhost:5000/api/ai/analyze"
+      console.log(auth);
+      const res = await fetch(url,{
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": auth
+        },
+        body: JSON.stringify({transactions, income, spent, net})
+      })
+      console.log("res::::::::", res)
+      /*
+      const res = await fetch("http://localhost:5000/api/ai/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ transactions, income, spent, net }),
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const json = line.slice(6).trim();
+          if (json === "[DONE]") continue;
+          try {
+            const evt = JSON.parse(json);
+            if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+              setInsight((prev) => prev + evt.delta.text);
+            }
+          } catch {
+            // malformed chunk — skip
+          }
+        }
+      }
+      setDone(true);
+      */
+    } catch (e: any) {
+      setError(e.message);
+      hasRun.current = false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const regenerate = () => {
+    hasRun.current = false;
+    setDone(false);
+    setInsight("");
+    run();
+  };
+
+  useEffect(() => {
+    if (transactions.length > 0) run();
+  }, [transactions.length]);
+
+  const showSkeleton = loading && !insight;
+  const showDots = loading && !!insight;
+
   return (
     <div style={{
       background: "#0d0d0c",
@@ -178,11 +191,13 @@ function AIInsightPanel() {
       position: "relative",
       overflow: "hidden",
     }}>
+      {/* top glow line */}
       <div style={{
         position: "absolute", top: 0, left: 0, right: 0, height: "1px",
         background: "linear-gradient(90deg, transparent, rgba(16,185,129,0.5), transparent)",
       }} />
 
+      {/* header */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
         <div style={{
           width: "30px", height: "30px", borderRadius: "8px",
@@ -199,15 +214,62 @@ function AIInsightPanel() {
             Claude Financial Insights
           </div>
         </div>
+        {showDots && (
+          <div style={{ marginLeft: "auto", display: "flex", gap: "4px", alignItems: "center" }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{
+                width: "4px", height: "4px", borderRadius: "50%", background: "#10b981",
+                animation: `aidot 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }} />
+            ))}
+          </div>
+        )}
       </div>
 
-      <div style={{ fontSize: "13.5px", lineHeight: 1.78, color: "rgba(255,255,255,0.7)", fontWeight: 300, letterSpacing: "0.01em" }}>
-        {HARDCODED_INSIGHT.map((para, i) => (
-          <p key={i} style={{ margin: 0, marginBottom: i < HARDCODED_INSIGHT.length - 1 ? "14px" : 0 }}>
-            {para}
-          </p>
-        ))}
-      </div>
+      {/* error */}
+      {error && (
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: "11px", color: "#f87171" }}>
+          Failed to generate: {error}
+          <button onClick={regenerate} style={{ marginLeft: "12px", background: "none", border: "none", color: "#f87171", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit", fontSize: "inherit" }}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* skeleton */}
+      {showSkeleton && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {[88, 72, 94, 65, 80].map((w, i) => (
+            <Skeleton key={i} w={`${w}%`} h="12px" />
+          ))}
+        </div>
+      )}
+
+      {/* streamed text */}
+      {insight && (
+        <div style={{ fontSize: "13.5px", lineHeight: 1.78, color: "rgba(255,255,255,0.7)", fontWeight: 300, letterSpacing: "0.01em" }}>
+          {insight.split("\n\n").filter(Boolean).map((para, i) => (
+            <p key={i} style={{ margin: 0, marginBottom: i < insight.split("\n\n").filter(Boolean).length - 1 ? "14px" : 0 }}>
+              {para}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* regenerate */}
+      {done && (
+        <button onClick={regenerate} style={{
+          marginTop: "20px", fontFamily: "'DM Mono',monospace", fontSize: "9.5px",
+          letterSpacing: "0.06em", textTransform: "uppercase",
+          color: "rgba(255,255,255,0.25)", background: "transparent",
+          border: "none", cursor: "pointer", padding: 0, transition: "color 0.15s",
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.5)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.25)")}
+        >
+          ↺ Regenerate
+        </button>
+      )}
     </div>
   );
 }

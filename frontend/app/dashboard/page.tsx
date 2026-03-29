@@ -84,6 +84,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("");
+  const user = localStorage.getItem("token")
+  console.log(user)
 
   // ── Fetch ───────────────────────────────────────────────────────────────────
   useEffect(() => {
