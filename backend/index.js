@@ -2,19 +2,16 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import dotenv from "dotenv"
+import mongoose from 'mongoose';
 import {PlaidEnvironments, PlaidApi, Configuration} from "plaid"
 
 import plaidRoutes from "./src/routes/plaid.js"
+import authRoutes from "./src/routes/auth.js"
 
 
 import middlewares from './src/routes/middleware.js';
 
 dotenv.config()
-
-const app = express()
-app.use(express.json())
-app.use(cors());
-app.use(morgan('tiny'));
 
 export const plaidClient = new PlaidApi(
   new Configuration({
@@ -26,12 +23,26 @@ export const plaidClient = new PlaidApi(
       }
     }
   })
-)
+);
 
-app.use("/api/plaid", plaidRoutes)
+(async () => {
+   await mongoose.connect(process.env.MONGOURI)
+    console.log("db connected")
 
-app.use(middlewares.notFound);
-app.use(middlewares.errorHandler);
-const port = 5000;
-app.listen(port, () => console.log(`Server has started on port: ${port}`))
 
+    const app = express()
+    app.use(express.json())
+    app.use(cors());
+    app.use(morgan('tiny'));
+
+
+    app.use("/api/plaid", plaidRoutes)
+    app.use("/api/auth", authRoutes)
+
+    app.use(middlewares.notFound);
+    app.use(middlewares.errorHandler);
+
+    const port = 5000;
+    app.listen(port, () => console.log(`Server has started on port: ${port}`))
+
+})()
